@@ -1,17 +1,30 @@
 import './style.css'
+import { BedrockRuntimeClient, ConverseCommand } from "@aws-sdk/client-bedrock-runtime";
 
-// An array of affirmations
-const affirmations = ["You've got this", "You are amazing", "You can achieve anything", "You are awesome"];
+// const modelId =  'anthropic.claude-v2';
+const modelId = 'anthropic.claude-3-haiku-20240307-v1:0';
+const prompt = "Give me an affirmation to boost my motivation today, referencing plants, animals, or flowers by adding emoji. Don't show the prompt, only the quote. Do not add anything like Here is an affirmation... just return the affirmation alone";
+const conversation = [
+  {
+    role: "user",
+    content: [{ text: prompt }],
+  },
+];
 
 async function fetchNewAffirmation() {
   disableButton(true);
   showLoadingAnimation();
 
-  // choose a random affirmation from the array
-  const affirmation = affirmations[Math.floor(Math.random() * affirmations.length)];
+  try {
+    const response = await client.send(new ConverseCommand({ modelId, messages: conversation }));
+    const affirmation = response.output.message.content[0].text;
+    // set the affirmation in HTML
+    document.querySelector("#affirmation").innerHTML = affirmation;
+  } catch (err) {
+    console.error(err);
+    document.querySelector("#affirmation").innerHTML = err;
+  }
 
-  // set the affirmation
-  document.querySelector("#affirmation").innerHTML = affirmation;
   disableButton(false);
 }
 
@@ -26,12 +39,43 @@ function disableButton(isDisabled) {
   affirmationButton.disabled = isDisabled;
 }
 
+init();
+
 // Called on page load (or refresh), fetches a new affirmation
 async function init() {
-  await fetchNewAffirmation();
+  try {
+    // get the user's credentials from environment variables
+    const creds = await fetchCredentials();
+    // instantiate the BedrockRuntimeClient  
+    client = await createBedrockClient(creds);
+    // Once everything is setup, let's get the first affirmation
+    await fetchNewAffirmation();
+
+  } catch(err) {
+    console.error(err);
+    document.querySelector("#affirmation").innerHTML = err;
+  }
   
   const affirmationButton = document.querySelector("#getNewAffirmation");
   affirmationButton.addEventListener("click", fetchNewAffirmation);
 }
 
-init();
+let client = null;
+async function createBedrockClient(creds) {  
+  client = await new BedrockRuntimeClient({
+    credentials: creds.credentials,
+    region: creds.region
+  });
+  return client;
+}
+
+async function fetchCredentials() {
+  return {
+    region: "us-west-2",  // Hardcoded as this region is a requirement for the hosted Workshops and must not be changed.
+    credentials: {
+      accessKeyId: import.meta.env.VITE_AWS_ACCESS_KEY_ID,
+      secretAccessKey: import.meta.env.VITE_AWS_SECRET_ACCESS_KEY,
+      sessionToken: import.meta.env.VITE_AWS_SESSION_TOKEN,
+    },
+  };
+}
